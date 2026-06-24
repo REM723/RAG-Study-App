@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Single source of truth for models. 70b for question generation + rubric grading.
 MODEL_ID = "llama-3.3-70b-versatile"
@@ -52,6 +51,6 @@ def user_index(user_id):
 
 def validate_keys():
     """Raise loudly at startup if the Groq key is missing (fix #1).
-    Embeddings are local now, so GOOGLE_API_KEY is no longer required."""
+    Embeddings run locally, so no Google/embedding API key is needed."""
     if not GROQ_API_KEY:
         raise RuntimeError("Missing required env var API_KEY (Groq). Set it in .env")

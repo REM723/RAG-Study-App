@@ -41,6 +41,6 @@ app.include_router(users.router)
 def health():
     return {
         "status": "ok",
-        "keys_configured": bool(config.GROQ_API_KEY and config.GOOGLE_API_KEY),
+        "keys_configured": bool(config.GROQ_API_KEY),
         "model": config.MODEL_ID,
     }
