@@ -62,17 +62,25 @@ def _run_ingest(user_id):
     """Background: rebuild this user's FAISS index, update their documents' status."""
     db = SessionLocal()
     try:
-        per_file, chunks = rag.rebuild_index(user_id)
         docs = db.query(Document).filter_by(user_id=user_id).all()
+        docmap = {d.filename: d.id for d in docs}
+        # remove orphan PDFs (no matching Document row) so they aren't indexed
+        for f in config.user_artifacts(user_id).glob("*.pdf"):
+            if f.name not in docmap:
+                f.unlink(missing_ok=True)
+
+        per_file, chunks = rag.rebuild_index(user_id)
         doc_ids = [d.id for d in docs]
         # refresh this user's Chunk rows to match the rebuilt index
         if doc_ids:
             db.query(Chunk).filter(Chunk.document_id.in_(doc_ids)).delete(synchronize_session=False)
-        docmap = {d.filename: d.id for d in docs}
         for c in chunks:
             f = c.metadata.get("source_file")
+            did = docmap.get(f)
+            if did is None:
+                continue  # guard: never insert a chunk with NULL document_id
             db.add(Chunk(
-                document_id=docmap.get(f),
+                document_id=did,
                 text=c.page_content,
                 page_number=c.metadata.get("page"),
                 chapter=c.metadata.get("chapter"),
@@ -86,6 +94,7 @@ def _run_ingest(user_id):
                 d.status, d.error = "failed", "No chunks extracted"
         db.commit()
     except Exception as e:
+        db.rollback()  # clear the failed transaction before writing the failure status
         log.exception("Ingest failed")
         msg = str(e) or e.__class__.__name__  # some exceptions (e.g. InvalidToken) stringify empty
         for d in db.query(Document).filter_by(user_id=user_id, status="processing").all():

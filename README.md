@@ -228,3 +228,4 @@ python -m backend.test_admin        # admin auth + generic CRUD
 - Incremental FAISS updates instead of full rebuild per ingest
 
 ---
+
