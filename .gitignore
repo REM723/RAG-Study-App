@@ -120,6 +120,11 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# App local artifacts
+app.db
+faiss_index/
+Artifacts/*.pdf
+
 # Environments
 .env
 .venv
