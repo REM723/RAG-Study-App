@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useUser } from '../user.jsx'
 import { api } from '../api'
 
 export default function Generate() {
+  const { user } = useUser()
   const [mcqN, setMcqN] = useState(3)
   const [descN, setDescN] = useState(2)
   const [mcqs, setMcqs] = useState([])
@@ -12,8 +14,8 @@ export default function Generate() {
   const run = async () => {
     setErr(null); setBusy(true); setMcqs([]); setDescs([])
     try {
-      if (Number(mcqN) > 0) setMcqs(await api.genMcq(Number(mcqN)))
-      if (Number(descN) > 0) setDescs(await api.genDesc(Number(descN)))
+      if (Number(mcqN) > 0) setMcqs(await api.genMcq(Number(mcqN), user.id))
+      if (Number(descN) > 0) setDescs(await api.genDesc(Number(descN), user.id))
     } catch (e) { setErr(e.message) }
     setBusy(false)
   }

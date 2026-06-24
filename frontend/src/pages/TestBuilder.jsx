@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useUser } from '../user.jsx'
 import { api } from '../api'
 
 export default function TestBuilder() {
+  const { user } = useUser()
   const [mcq, setMcq] = useState(3)
   const [desc, setDesc] = useState(1)
   const [err, setErr] = useState(null)
@@ -12,7 +14,7 @@ export default function TestBuilder() {
   const create = async () => {
     setErr(null); setBusy(true)
     try {
-      const t = await api.createTest(Number(mcq), Number(desc))
+      const t = await api.createTest(Number(mcq), Number(desc), user.id)
       nav(`/tests/${t.id}`)
     } catch (e) { setErr(e.message); setBusy(false) }
   }

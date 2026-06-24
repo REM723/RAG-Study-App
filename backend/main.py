@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .db import init_db
-from .routers import documents, questions, tests
+from .routers import admin, documents, questions, tests, users
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("rag")
@@ -33,6 +33,8 @@ app.add_middleware(
 app.include_router(documents.router)
 app.include_router(questions.router)
 app.include_router(tests.router)
+app.include_router(admin.router)
+app.include_router(users.router)
 
 
 @app.get("/health")

@@ -17,10 +17,25 @@ CHUNK_OVERLAP = 200
 MAX_FILES = 5
 MAX_UPLOAD_MB = 25
 
+# Admin panel password. Override in .env: ADMIN_PASSWORD=...
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 ARTIFACTS_DIR = BASE_DIR / "Artifacts"
 FAISS_DIR = BASE_DIR / "faiss_index"
 DB_PATH = BASE_DIR / "app.db"
+
+
+def user_artifacts(user_id):
+    """Per-user PDF folder, created on demand."""
+    p = ARTIFACTS_DIR / str(user_id)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def user_index(user_id):
+    """Per-user FAISS index directory."""
+    return FAISS_DIR / str(user_id)
 
 
 def validate_keys():

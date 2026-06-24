@@ -87,8 +87,8 @@ def parse_descriptive(text):
     }
 
 
-def _usable_chunks():
-    store = rag.load_index()
+def _usable_chunks(user_id):
+    store = rag.load_index(user_id)
     if store is None:
         raise ValueError("No index. Upload and ingest documents first.")
     chunks = [d for d in store.docstore._dict.values() if len(d.page_content) > 200]
@@ -98,10 +98,10 @@ def _usable_chunks():
     return chunks
 
 
-def _generate(count, prompt, parser):
+def _generate(count, prompt, parser, user_id):
     """One question per chunk so every question traces to a single source chunk."""
     out, seen = [], set()
-    for d in _usable_chunks():
+    for d in _usable_chunks(user_id):
         if len(out) >= count:
             break
         try:
@@ -120,12 +120,12 @@ def _generate(count, prompt, parser):
     return out
 
 
-def generate_mcqs(count):
-    return _generate(count, MCQ_PROMPT, parse_mcq)
+def generate_mcqs(count, user_id):
+    return _generate(count, MCQ_PROMPT, parse_mcq, user_id)
 
 
-def generate_descriptive(count):
-    return _generate(count, DESC_PROMPT, parse_descriptive)
+def generate_descriptive(count, user_id):
+    return _generate(count, DESC_PROMPT, parse_descriptive, user_id)
 
 
 GRADE_PROMPT = """Grade a student's answer against a rubric. For each rubric point, decide

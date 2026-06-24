@@ -3,12 +3,12 @@ import logging
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from .. import config, rag
-from ..db import Document, SessionLocal, get_db
+from ..db import Chunk, Document, SessionLocal, get_db
 from ..schemas import DocumentOut, IngestStatus, UploadResult
 
 log = logging.getLogger("rag")
@@ -16,10 +16,12 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.post("/upload", response_model=UploadResult)
-def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_db)):
+def upload(files: list[UploadFile] = File(...), user_id: int = Form(...),
+           db: Session = Depends(get_db)):
     if not 1 <= len(files) <= config.MAX_FILES:
         raise HTTPException(400, f"Upload 1-{config.MAX_FILES} PDF files (got {len(files)})")
 
+    folder = config.user_artifacts(user_id)
     # ponytail: fail-fast per file; earlier files in a failing batch stay saved (re-uploadable)
     out = []
     for f in files:
@@ -31,8 +33,8 @@ def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_db)):
         if len(data) > config.MAX_UPLOAD_MB * 1024 * 1024:
             raise HTTPException(400, f"{name}: exceeds {config.MAX_UPLOAD_MB}MB")
 
-        dest = config.ARTIFACTS_DIR / name
-        if dest.exists() or db.query(Document).filter_by(filename=name).first():
+        dest = folder / name
+        if dest.exists() or db.query(Document).filter_by(user_id=user_id, filename=name).first():
             raise HTTPException(409, f"{name}: already uploaded")
 
         try:
@@ -42,7 +44,7 @@ def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_db)):
             raise HTTPException(400, f"{name}: unreadable or corrupt PDF")
 
         dest.write_bytes(data)
-        doc = Document(filename=name, status="pending")
+        doc = Document(filename=name, status="pending", file_size=len(data), user_id=user_id)
         db.add(doc)
         db.commit()
         db.refresh(doc)
@@ -51,12 +53,27 @@ def upload(files: list[UploadFile] = File(...), db: Session = Depends(get_db)):
     return {"uploaded": out}
 
 
-def _run_ingest():
-    """Background: rebuild FAISS, update per-document status."""
+def _run_ingest(user_id):
+    """Background: rebuild this user's FAISS index, update their documents' status."""
     db = SessionLocal()
     try:
-        per_file = rag.rebuild_index()
-        for d in db.query(Document).all():
+        per_file, chunks = rag.rebuild_index(user_id)
+        docs = db.query(Document).filter_by(user_id=user_id).all()
+        doc_ids = [d.id for d in docs]
+        # refresh this user's Chunk rows to match the rebuilt index
+        if doc_ids:
+            db.query(Chunk).filter(Chunk.document_id.in_(doc_ids)).delete(synchronize_session=False)
+        docmap = {d.filename: d.id for d in docs}
+        for c in chunks:
+            f = c.metadata.get("source_file")
+            db.add(Chunk(
+                document_id=docmap.get(f),
+                text=c.page_content,
+                page_number=c.metadata.get("page"),
+                chapter=c.metadata.get("chapter"),
+                embedding_ref=f"{f}#{c.metadata.get('chunk_index')}",
+            ))
+        for d in docs:
             n = per_file.get(d.filename)
             if n:
                 d.status, d.chunks, d.error = "completed", n, None
@@ -65,7 +82,7 @@ def _run_ingest():
         db.commit()
     except Exception as e:
         log.exception("Ingest failed")
-        for d in db.query(Document).filter_by(status="processing").all():
+        for d in db.query(Document).filter_by(user_id=user_id, status="processing").all():
             d.status, d.error = "failed", str(e)
         db.commit()
     finally:
@@ -73,20 +90,20 @@ def _run_ingest():
 
 
 @router.post("/ingest", response_model=IngestStatus)
-def ingest(background: BackgroundTasks, db: Session = Depends(get_db)):
-    docs = db.query(Document).all()
+def ingest(user_id: int, background: BackgroundTasks, db: Session = Depends(get_db)):
+    docs = db.query(Document).filter_by(user_id=user_id).all()
     if not docs:
         raise HTTPException(400, "No documents uploaded")
     for d in docs:
         d.status = "processing"
     db.commit()
-    background.add_task(_run_ingest)
+    background.add_task(_run_ingest, user_id)
     return {"status": "processing", "documents": [DocumentOut.model_validate(d) for d in docs]}
 
 
 @router.get("", response_model=list[DocumentOut])
-def list_documents(db: Session = Depends(get_db)):
-    return db.query(Document).order_by(Document.id).all()
+def list_documents(user_id: int, db: Session = Depends(get_db)):
+    return db.query(Document).filter_by(user_id=user_id).order_by(Document.id).all()
 
 
 @router.delete("/{doc_id}")
@@ -94,11 +111,11 @@ def delete_document(doc_id: int, db: Session = Depends(get_db)):
     doc = db.get(Document, doc_id)
     if not doc:
         raise HTTPException(404, "Document not found")
-    (config.ARTIFACTS_DIR / doc.filename).unlink(missing_ok=True)
+    (config.user_artifacts(doc.user_id) / doc.filename).unlink(missing_ok=True)
+    db.query(Chunk).filter_by(document_id=doc_id).delete()
     db.delete(doc)
     db.commit()
-    # ponytail: index keeps the deleted file's chunks until next ingest; drop it if nothing's left.
-    # Re-ingest to fully remove a deleted file's chunks from retrieval.
-    if db.query(Document).count() == 0:
-        shutil.rmtree(config.FAISS_DIR, ignore_errors=True)
+    # ponytail: index keeps the deleted file's chunks until next ingest; drop it if the user has none left.
+    if db.query(Document).filter_by(user_id=doc.user_id).count() == 0:
+        shutil.rmtree(config.user_index(doc.user_id), ignore_errors=True)
     return {"deleted": doc_id}

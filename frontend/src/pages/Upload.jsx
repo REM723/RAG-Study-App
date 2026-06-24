@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useUser } from '../user.jsx'
 import { api } from '../api'
 
 export default function Upload() {
+  const { user } = useUser()
   const [files, setFiles] = useState([])
   const [msg, setMsg] = useState(null)
   const [err, setErr] = useState(null)
@@ -18,7 +20,7 @@ export default function Upload() {
   const submit = async () => {
     setErr(null); setMsg(null); setBusy(true)
     try {
-      const r = await api.upload(files)
+      const r = await api.upload(files, user.id)
       setMsg(`Uploaded ${r.uploaded.length} file(s).`)
       setFiles([])
     } catch (e) { setErr(e.message) }

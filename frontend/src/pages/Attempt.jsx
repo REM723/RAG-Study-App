@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useUser } from '../user.jsx'
 import { api } from '../api'
 
 export default function Attempt() {
+  const { user } = useUser()
   const { id } = useParams()
   const [test, setTest] = useState(null)
   const [answers, setAnswers] = useState({})
@@ -19,13 +21,13 @@ export default function Attempt() {
     setAnswers(next); setSaved(false)
     clearTimeout(timer.current)  // debounced autosave
     timer.current = setTimeout(() => {
-      api.saveAttempt(id, next).then(() => setSaved(true)).catch(() => {})
+      api.saveAttempt(id, next, user.id).then(() => setSaved(true)).catch(() => {})
     }, 800)
   }
 
   const submit = async () => {
     setBusy(true); setErr(null)
-    try { await api.submit(id, answers); nav(`/tests/${id}/result`) }
+    try { await api.submit(id, answers, user.id); nav(`/tests/${id}/result`) }
     catch (e) { setErr(e.message); setBusy(false) }
   }
 
@@ -34,7 +36,7 @@ export default function Attempt() {
 
   return (
     <div>
-      <h1>Test #{test.id}</h1>
+      <h1>Test #{test.seq}</h1>
       {test.questions.map((q, i) => (
         <div key={q.id} className="card">
           <p><strong>{i + 1}.</strong> {q.question}</p>

@@ -27,29 +27,35 @@ def demo():
 
     pdf = _pdf_bytes()
     with TestClient(app) as c:
+        uid = {"user_id": "1"}
         # reject non-pdf
-        r = c.post("/documents/upload", files={"files": ("x.txt", b"hi", "text/plain")})
+        r = c.post("/documents/upload", files={"files": ("x.txt", b"hi", "text/plain")}, data=uid)
         assert r.status_code == 400, r.text
 
         # reject >5 files
         many = [("files", (f"f{i}.pdf", pdf, "application/pdf")) for i in range(6)]
-        assert c.post("/documents/upload", files=many).status_code == 400
+        assert c.post("/documents/upload", files=many, data=uid).status_code == 400
 
         # accept a valid pdf
-        r = c.post("/documents/upload", files={"files": ("good.pdf", pdf, "application/pdf")})
+        r = c.post("/documents/upload", files={"files": ("good.pdf", pdf, "application/pdf")}, data=uid)
         assert r.status_code == 200, r.text
         assert r.json()["uploaded"][0]["status"] == "pending"
 
-        # reject duplicate
-        r = c.post("/documents/upload", files={"files": ("good.pdf", pdf, "application/pdf")})
+        # same filename rejected for the same user
+        r = c.post("/documents/upload", files={"files": ("good.pdf", pdf, "application/pdf")}, data=uid)
         assert r.status_code == 409, r.text
 
+        # but a DIFFERENT user can upload the same filename
+        r = c.post("/documents/upload", files={"files": ("good.pdf", pdf, "application/pdf")}, data={"user_id": "2"})
+        assert r.status_code == 200, r.text
+
         # reject corrupt pdf
-        r = c.post("/documents/upload", files={"files": ("bad.pdf", b"not a pdf", "application/pdf")})
+        r = c.post("/documents/upload", files={"files": ("bad.pdf", b"not a pdf", "application/pdf")}, data=uid)
         assert r.status_code == 400, r.text
 
-        # list shows the one good doc
-        assert len(c.get("/documents").json()) == 1
+        # list is scoped per user
+        assert len(c.get("/documents?user_id=1").json()) == 1
+        assert len(c.get("/documents?user_id=2").json()) == 1
 
     print("OK")
 

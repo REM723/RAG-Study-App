@@ -21,6 +21,7 @@ class IngestStatus(BaseModel):
 
 class CountRequest(BaseModel):
     count: int = Field(ge=1)  # capped in practice by number of source chunks
+    user_id: int | None = None
 
 
 class QuestionOut(BaseModel):
@@ -39,6 +40,7 @@ class QuestionOut(BaseModel):
 class TestRequest(BaseModel):
     mcq_count: int = Field(ge=0)
     descriptive_count: int = Field(ge=0)
+    user_id: int | None = None
 
 
 class TestQuestionOut(BaseModel):
@@ -54,8 +56,10 @@ class TestQuestionOut(BaseModel):
 
 class TestView(BaseModel):
     id: int
+    seq: int | None = None
     questions: list[TestQuestionOut]
 
 
 class AttemptRequest(BaseModel):
     answers: dict[str, str | None] = {}
+    user_id: int | None = None

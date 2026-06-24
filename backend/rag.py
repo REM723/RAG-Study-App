@@ -1,4 +1,5 @@
 import logging
+import shutil
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
@@ -21,13 +22,13 @@ def embeddings():
     return _embeddings
 
 
-def _load_chunks():
-    """Load every PDF in Artifacts, chunk with source/page/index metadata."""
+def _load_chunks(user_id):
+    """Load every PDF in the user's Artifacts folder, chunk with source/page/index metadata."""
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config.CHUNK_SIZE, chunk_overlap=config.CHUNK_OVERLAP
     )
     chunks, per_file = [], {}
-    for pdf in sorted(config.ARTIFACTS_DIR.glob("*.pdf")):
+    for pdf in sorted(config.user_artifacts(user_id).glob("*.pdf")):
         pages = PyPDFLoader(str(pdf)).load()         # one Document per page
         split = splitter.split_documents(pages)       # fix #2: no [:20] cap
         for i, d in enumerate(split):
@@ -39,31 +40,32 @@ def _load_chunks():
     return chunks, per_file
 
 
-def rebuild_index():
-    """Rebuild whole FAISS index from all PDFs, persist to disk (fix #2 + #3).
+def rebuild_index(user_id):
+    """Rebuild this user's FAISS index from their PDFs, persist to disk (fix #2 + #3).
 
-    Returns {filename: chunk_count}.
+    Returns ({filename: chunk_count}, [chunk Documents]).
     """
     # ponytail: full rebuild on every ingest; switch to incremental .add if reindex hurts
-    # ponytail: GoogleGenerativeAIEmbeddings batches internally; add manual batching/retry if rate limits bite
-    chunks, per_file = _load_chunks()
+    # ponytail: embeddings batch internally; add manual batching/retry if rate limits bite
+    idx = config.user_index(user_id)
+    chunks, per_file = _load_chunks(user_id)
     if not chunks:
-        return per_file
+        shutil.rmtree(idx, ignore_errors=True)  # no PDFs left -> drop stale index
+        return per_file, chunks
     store = FAISS.from_documents(chunks, embeddings())
-    config.FAISS_DIR.mkdir(exist_ok=True)
-    store.save_local(str(config.FAISS_DIR))
-    log.info("FAISS rebuilt: %d chunks from %d files", len(chunks), len(per_file))
-    return per_file
+    idx.mkdir(parents=True, exist_ok=True)
+    store.save_local(str(idx))
+    log.info("FAISS rebuilt for user %s: %d chunks from %d files", user_id, len(chunks), len(per_file))
+    return per_file, chunks
 
 
-def load_index():
-    if not (config.FAISS_DIR / "index.faiss").exists():
+def load_index(user_id):
+    idx = config.user_index(user_id)
+    if not (idx / "index.faiss").exists():
         return None
-    return FAISS.load_local(
-        str(config.FAISS_DIR), embeddings(), allow_dangerous_deserialization=True
-    )
+    return FAISS.load_local(str(idx), embeddings(), allow_dangerous_deserialization=True)
 
 
-def retrieve(query, k=4):
-    store = load_index()
+def retrieve(query, user_id, k=4):
+    store = load_index(user_id)
     return store.similarity_search(query, k=k) if store else []

@@ -16,20 +16,35 @@ const json = (body) => ({
   body: JSON.stringify(body),
 })
 
+const adminHeaders = () => ({ 'X-Admin-Password': sessionStorage.getItem('adminpw') || '' })
+
 export const api = {
-  documents: () => req('/documents'),
-  upload: (files) => {
+  documents: (userId) => req(`/documents?user_id=${userId}`),
+  upload: (files, userId) => {
     const fd = new FormData()
     for (const f of files) fd.append('files', f)
+    fd.append('user_id', userId)
     return req('/documents/upload', { method: 'POST', body: fd })
   },
-  ingest: () => req('/documents/ingest', { method: 'POST' }),
+  ingest: (userId) => req(`/documents/ingest?user_id=${userId}`, { method: 'POST' }),
   deleteDoc: (id) => req(`/documents/${id}`, { method: 'DELETE' }),
-  genMcq: (count) => req('/questions/mcq', json({ count })),
-  genDesc: (count) => req('/questions/descriptive', json({ count })),
-  createTest: (mcq_count, descriptive_count) => req('/tests', json({ mcq_count, descriptive_count })),
+  genMcq: (count, user_id) => req('/questions/mcq', json({ count, user_id })),
+  genDesc: (count, user_id) => req('/questions/descriptive', json({ count, user_id })),
+  createTest: (mcq_count, descriptive_count, user_id) =>
+    req('/tests', json({ mcq_count, descriptive_count, user_id })),
   getTest: (id) => req(`/tests/${id}`),
-  saveAttempt: (id, answers) => req(`/tests/${id}/attempt`, json({ answers })),
-  submit: (id, answers) => req(`/tests/${id}/submit`, json({ answers })),
+  saveAttempt: (id, answers, user_id) => req(`/tests/${id}/attempt`, json({ answers, user_id })),
+  submit: (id, answers, user_id) => req(`/tests/${id}/submit`, json({ answers, user_id })),
   result: (id) => req(`/tests/${id}/result`),
+  users: () => req('/users'),
+  createUser: (body) => req('/users', json(body)),
+  login: (email, password) => req('/users/login', json({ email, password })),
+  userTests: (id) => req(`/users/${id}/tests`),
+  adminCheck: (pw) => req('/admin/_check', { headers: { 'X-Admin-Password': pw } }),
+  adminList: (e) => req(`/admin/${e}`, { headers: adminHeaders() }),
+  adminCreate: (e, data) => req(`/admin/${e}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...adminHeaders() }, body: JSON.stringify(data),
+  }),
+  adminDelete: (e, id) => req(`/admin/${e}/${id}`, { method: 'DELETE', headers: adminHeaders() }),
+  adminReset: () => req('/admin/reset', { method: 'POST', headers: adminHeaders() }),
 }

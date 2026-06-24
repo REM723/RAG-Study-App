@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
+import { useUser } from '../user.jsx'
 import { api } from '../api'
 
 export default function Documents() {
+  const { user } = useUser()
   const [docs, setDocs] = useState([])
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const load = async () => {
-    try { setDocs(await api.documents()) } catch (e) { setErr(e.message) }
+    try { setDocs(await api.documents(user.id)) } catch (e) { setErr(e.message) }
   }
 
   useEffect(() => { load() }, [])
@@ -21,7 +23,7 @@ export default function Documents() {
 
   const ingest = async () => {
     setErr(null); setBusy(true)
-    try { await api.ingest(); await load() } catch (e) { setErr(e.message) }
+    try { await api.ingest(user.id); await load() } catch (e) { setErr(e.message) }
     setBusy(false)
   }
 
@@ -50,7 +52,12 @@ export default function Documents() {
             ))}
           </tbody>
         </table>
-      ) : <p>No documents yet.</p>}
+      ) : (
+        <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
+          <img src="/img/books.jpg" alt="" style={{ width: '180px', height: '120px', objectFit: 'cover', borderRadius: '12px', opacity: .9 }} />
+          <p className="muted">No documents yet — head to <strong>Upload</strong> to add your PDFs, then ingest them here.</p>
+        </div>
+      )}
     </div>
   )
 }
