@@ -1,101 +1,230 @@
+# StudyRAG — Question-Answering & Test Generation from your own PDFs
 
-## About The Project
+StudyRAG turns your study material into practice tests. Upload PDFs, the app indexes
+them with a Retrieval-Augmented-Generation (RAG) pipeline, then generates **source-grounded**
+multiple-choice and descriptive questions, lets you take timed tests, and grades them —
+multiple-choice deterministically and descriptive answers point-by-point with an LLM.
 
+Every user has their own private library, vector index, questions, and test history.
 
-The Document Question Answering System is a sophisticated tool designed to streamline information retrieval from vast document collections. Built on a foundation of advanced natural language processing techniques, the system features a user-friendly interface powered by Streamlit. Leveraging the LangChain framework and Google Generative AI, it ingests documents, converts them into vector embeddings, and employs the Retrieval augmentation generation(RAG) architecture for accurate question answering. Users can input queries through the intuitive interface, with the system retrieving precise answers based on the document context. With its efficiency, accuracy, and scalability, the system finds applications in research, knowledge management, education, and customer support, representing a significant advancement in information access technology.
+> Originally forked from a Streamlit RAG demo; rebuilt as a FastAPI backend + React frontend
+> with accounts, per-user isolation, local embeddings, and encryption at rest.
 
-## Library Requirements
+---
 
- - faiss-cpu
- - langchain-groq
- - PyPDF2
- - langchain_google_genai
- - langchain
- - streamlit
- - python-dotenv
+## Features
 
-## Getting Started
+- **Accounts** — sign up / log in with email + password (hashed, never stored in plaintext).
+- **Per-user isolation** — each user's PDFs, FAISS index, questions, and tests are separate.
+- **Document upload** — 1–5 PDFs per upload, type/size/readability validated, re-uploads auto-renamed.
+- **Encryption at rest** — uploaded PDFs are encrypted on disk (AES via Fernet); decrypted only in memory during ingestion.
+- **Whole-document ingestion** — no page cap; chunked with source file + page metadata; FAISS index persists to disk and is rebuilt only on change.
+- **Local embeddings** — `BAAI/bge-small-en-v1.5` via sentence-transformers (no embedding API, no rate limits, no cost).
+- **Question generation** — grounded MCQs (4 options, single answer, source ref) and descriptive questions with a point-wise rubric.
+- **Tests** — assemble a test from your questions, take it with autosave, submit, and get a scored evaluation.
+- **Scoring** — MCQ is deterministic (1/0); descriptive is 1 mark per rubric point covered (LLM-judged).
+- **Results** — total + section scores, per-question review, per-point descriptive feedback, source references; export to PDF.
+- **Admin panel** — password-gated CRUD over all data tables, plus a full reset. Locks itself when you leave the page.
 
-This will help you understand how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
+---
 
-## Installation Steps
+## Tech stack
 
-### Option 1: Installation from GitHub
+**Backend (Python)**
+- FastAPI + Uvicorn
+- LangChain (`langchain`, `langchain-community`, `langchain-core`, `langchain-text-splitters`, `langchain-groq`)
+- LLM: Groq-hosted `llama-3.3-70b-versatile`
+- Embeddings: `BAAI/bge-small-en-v1.5` (sentence-transformers, local)
+- Vector store: FAISS (`faiss-cpu`)
+- PDF parsing: `pypdf`
+- DB: SQLite via SQLAlchemy
+- Security: stdlib PBKDF2 (passwords) + `cryptography` Fernet (file encryption)
 
-Follow these steps to install and set up the project directly from the GitHub repository:
+**Frontend (JavaScript)**
+- React + Vite
+- React Router, plain `fetch`, React Context for the logged-in user
+- Minimal hand-written CSS design system (no UI library)
 
-1. **Clone the Repository**
-   - Open your terminal or command prompt.
-   - Navigate to the directory where you want to install the project.
-   - Run the following command to clone the GitHub repository:
-     ```
-     git clone https://github.com/KalyanMurapaka45/Question-Answering-System-using-RAG.git
-     ```
+---
 
-2. **Create a Virtual Environment** (Optional but recommended)
-   - It's a good practice to create a virtual environment to manage project dependencies. Run the following command:
-     ```
-     conda create -p <Environment_Name> python==<python version> -y
-     ```
+## Project structure
 
-3. **Activate the Virtual Environment** (Optional)
-   - Activate the virtual environment based on your operating system:
-       ```
-       conda activate <Environment_Name>/
-       ```
+```
+.
+├── backend/
+│   ├── main.py            # FastAPI app, CORS, startup key validation, router wiring
+│   ├── config.py          # env + model constants, paths, per-user paths, file-encryption key
+│   ├── db.py              # SQLAlchemy models (8 tables) + lightweight migrations
+│   ├── security.py        # password hashing (PBKDF2) + file encryption (Fernet)
+│   ├── rag.py             # decrypt → chunk → embed → FAISS (per user); retrieve
+│   ├── generate.py        # Groq LLM: MCQ / descriptive generation + descriptive grading
+│   ├── scoring.py         # grading math (MCQ deterministic, descriptive per-point)
+│   ├── routers/
+│   │   ├── users.py       # signup, login, per-user test history
+│   │   ├── documents.py   # upload, ingest (background), list, delete
+│   │   ├── questions.py   # MCQ / descriptive generation
+│   │   ├── tests.py       # create / fetch / attempt / submit / result
+│   │   └── admin.py       # password-gated generic CRUD + reset
+│   └── test_*.py          # runnable self-checks (no framework needed)
+├── frontend/
+│   ├── public/img/        # logo + UI image assets
+│   └── src/
+│       ├── App.jsx        # routing, nav, login gate, admin layout
+│       ├── api.js         # API client
+│       ├── user.jsx       # current-user React context (localStorage)
+│       └── pages/         # Login, Dashboard, Documents, Generate, TestBuilder,
+│                          # Attempt, Results, ResultsList, Database (admin)
+├── Artifacts/             # per-user uploaded PDFs (encrypted) — gitignored
+├── faiss_index/           # per-user vector indexes — gitignored
+├── app.db                 # SQLite database — gitignored
+├── secret.key             # file-encryption key — gitignored (back this up!)
+├── requirements.txt
+└── README.md
+```
 
-4. **Install Dependencies**
-   - Navigate to the project directory:
-     ```
-     cd [project_directory]
-     ```
-   - Run the following command to install project dependencies:
-     ```
-     pip install -r requirements.txt
-     ```
+---
 
-5. **Run the Project**
-   - Start the project by running the appropriate command.
-     ```
-     streamlit run app.py
-     ```
+## Prerequisites
 
-6. **Access the Project**
-   - Open a web browser or the appropriate client to access the project.
+- Python 3.11+
+- Node.js 18+
+- A **Groq API key** (free): https://console.groq.com/keys
 
+Embeddings run locally, so no Google/OpenAI key is needed.
 
-## API Key Setup
+---
 
-To use this project, you need an API key from Google Gemini Large Language Model and Groq. Follow these steps to obtain and set up your API key:
+## Setup
 
-1. **Get API Key:**
-   - Visit the Provided Links [Groq API](https://console.groq.com/keys) and [Google API](https://aistudio.google.com/app/apikey).
-   - Follow the instructions to create an account and obtain your API key.
+### 1. Backend
 
-2. **Set Up API Key:**
-   - Create a file named `.env` in the project root.
-   - Add your API key to the `.env` file:
-     ```dotenv
-     API_KEY=your_api_key_here
-     ```
+```bash
+python -m venv venv
+# Windows (Git Bash):
+source venv/Scripts/activate
+# macOS/Linux:
+# source venv/bin/activate
 
-   **Note:** Keep your API key confidential. Do not share it publicly or expose it in your code.<br>
+pip install -r requirements.txt
+```
 
+> First run downloads the `bge-small-en-v1.5` model (~130 MB) on the first ingest.
 
-## Contributing
+### 2. Environment
 
-Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+Create a `.env` file in the project root:
 
-• **Report bugs**: If you encounter any bugs, please let us know. Open up an issue and let us know the problem.
+```dotenv
+API_KEY=your_groq_api_key_here      # required (Groq)
+ADMIN_PASSWORD=change-me            # optional, defaults to "admin123"
+```
 
-• **Contribute code**: If you are a developer and want to contribute, follow the instructions below to get started!
+`API_KEY` is the only required secret. The file-encryption key is generated automatically
+into `secret.key` on first use.
 
-1. Fork the Project
-2. Create your Feature Branch
-3. Commit your Changes
-4. Push to the Branch
-5. Open a Pull Request
+### 3. Frontend
 
-• **Suggestions**: If you don't want to code but have some awesome ideas, open up an issue explaining some updates or improvements you would like to see!
+```bash
+cd frontend
+npm install
+```
 
+---
+
+## Running
+
+Two terminals:
+
+```bash
+# Terminal 1 — backend (http://localhost:8000, docs at /docs)
+uvicorn backend.main:app --port 8000
+
+# Terminal 2 — frontend (http://localhost:5173)
+cd frontend && npm run dev
+```
+
+Open **http://localhost:5173**.
+
+> On Windows, `--reload` can leave orphaned processes holding the port; running without
+> `--reload` is more reliable (restart manually after backend edits).
+
+---
+
+## Usage
+
+1. **Sign up / log in** (email + password).
+2. **Documents** — drop 1–5 PDFs, click **Upload**, then **Ingest into Vector Store**; wait for status `completed`.
+3. **Generate** — request N MCQs and/or N descriptive questions; preview them with source references; export to PDF.
+4. **Build Test** — choose how many MCQ / descriptive questions; a test is assembled from your questions.
+5. **Take it** — radio buttons for MCQs, text areas for descriptive answers, autosaved as you go; submit.
+6. **Results** — see total + section scores, correct answers, per-point descriptive feedback, and sources. The **Results** tab lists all past evaluations.
+7. **Admin panel** — visit `/admin`, enter the admin password to browse/edit every table or reset everything.
+
+---
+
+## API overview
+
+`http://localhost:8000` — interactive docs at `/docs`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Liveness + config check |
+| POST | `/users` | Sign up (name, email, password) |
+| POST | `/users/login` | Log in (email, password) |
+| GET | `/users/{id}/tests` | A user's tests + scores (dashboard) |
+| POST | `/documents/upload` | Upload 1–5 PDFs (multipart, `user_id`) |
+| POST | `/documents/ingest?user_id=` | Build the user's FAISS index (background) |
+| GET | `/documents?user_id=` | List the user's documents + status |
+| DELETE | `/documents/{id}` | Delete a document |
+| POST | `/questions/mcq` | Generate MCQs `{count, user_id}` |
+| POST | `/questions/descriptive` | Generate descriptive questions `{count, user_id}` |
+| POST | `/tests` | Assemble a test `{mcq_count, descriptive_count, user_id}` |
+| GET | `/tests/{id}` | Test questions (answers hidden) |
+| POST | `/tests/{id}/attempt` | Autosave in-progress answers |
+| POST | `/tests/{id}/submit` | Grade + persist |
+| GET | `/tests/{id}/result` | Full evaluation |
+| GET/POST/DELETE | `/admin/...` | Admin CRUD + `/admin/reset` (requires `X-Admin-Password` header) |
+
+---
+
+## Data model (SQLite)
+
+`User`, `Document`, `Chunk`, `Question`, `Rubric`, `Test`, `Attempt`, `Evaluation`.
+
+- `Document`, `Question`, `Test`, `Attempt` are scoped by `user_id`.
+- Tests carry a per-user sequence number (`seq`) so each user's tests read 1, 2, 3…
+- `Chunk`, `Rubric`, and `Evaluation` are auto-populated by the pipeline (ingest / generate / submit) and are also editable from the admin panel.
+
+---
+
+## Security notes
+
+- **Passwords**: PBKDF2-HMAC-SHA256, per-user salt, 200k iterations. Never stored in plaintext.
+- **Uploaded PDFs**: encrypted at rest with Fernet (authenticated AES). The key lives in `secret.key` (gitignored) — **back it up**; losing it makes stored PDFs unrecoverable.
+- **Admin**: endpoints require the `X-Admin-Password` header; the panel re-locks every time you leave the page.
+- **Known limitation**: there are no session tokens yet — data APIs trust the `user_id` sent by the client. This protects data *at rest* and gates login, but is not full multi-tenant API authorization. Add JWT/session tokens before exposing this beyond a trusted environment.
+
+---
+
+## Tests
+
+Runnable self-checks (no test framework, no network):
+
+```bash
+python -m backend.test_security     # password hashing + file encryption
+python -m backend.test_documents    # upload validation + per-user scoping
+python -m backend.test_generate     # question parsing / validation / dedup
+python -m backend.test_scoring      # grading math
+python -m backend.test_admin        # admin auth + generic CRUD
+```
+
+---
+
+## Deferred / possible next steps
+
+- Session tokens (JWT) for real API authorization
+- OCR for scanned/image-only PDFs (currently text PDFs only)
+- Hosted vector store and teacher/admin cross-user views
+- Incremental FAISS updates instead of full rebuild per ingest
+
+---

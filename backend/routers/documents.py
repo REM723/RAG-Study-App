@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
-from .. import config, rag
+from .. import config, rag, security
 from ..db import Chunk, Document, SessionLocal, get_db
 from ..schemas import DocumentOut, IngestStatus, UploadResult
 
@@ -33,17 +33,22 @@ def upload(files: list[UploadFile] = File(...), user_id: int = Form(...),
         if len(data) > config.MAX_UPLOAD_MB * 1024 * 1024:
             raise HTTPException(400, f"{name}: exceeds {config.MAX_UPLOAD_MB}MB")
 
-        dest = folder / name
-        if dest.exists() or db.query(Document).filter_by(user_id=user_id, filename=name).first():
-            raise HTTPException(409, f"{name}: already uploaded")
-
         try:
             if len(PdfReader(io.BytesIO(data)).pages) == 0:
                 raise ValueError("no pages")
         except Exception:
             raise HTTPException(400, f"{name}: unreadable or corrupt PDF")
 
-        dest.write_bytes(data)
+        # allow re-uploading the same name: auto-suffix so each copy stays distinct
+        stem, suffix = Path(name).stem, Path(name).suffix
+        cand, i = name, 1
+        while (folder / cand).exists() or db.query(Document).filter_by(user_id=user_id, filename=cand).first():
+            cand = f"{stem} ({i}){suffix}"
+            i += 1
+        name = cand
+
+        dest = folder / name
+        dest.write_bytes(security.encrypt_bytes(data))  # encrypted at rest
         doc = Document(filename=name, status="pending", file_size=len(data), user_id=user_id)
         db.add(doc)
         db.commit()
@@ -82,8 +87,9 @@ def _run_ingest(user_id):
         db.commit()
     except Exception as e:
         log.exception("Ingest failed")
+        msg = str(e) or e.__class__.__name__  # some exceptions (e.g. InvalidToken) stringify empty
         for d in db.query(Document).filter_by(user_id=user_id, status="processing").all():
-            d.status, d.error = "failed", str(e)
+            d.status, d.error = "failed", msg
         db.commit()
     finally:
         db.close()

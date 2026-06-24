@@ -3,6 +3,7 @@ groq
 langchain-groq
 PyPDF2
 sentence-transformers
+cryptography
 langchain
 langchain_community
 python-dotenv

@@ -5,7 +5,7 @@ import { api } from '../api'
 export default function Login() {
   const { login } = useUser()
   const [mode, setMode] = useState('login') // 'login' | 'signup'
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'student' })
+  const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -45,13 +45,6 @@ export default function Login() {
           <input placeholder="Email" type="email" value={form.email} onChange={set('email')} />
           <input placeholder="Password" type="password" value={form.password} onChange={set('password')}
             onKeyDown={(e) => e.key === 'Enter' && submit()} />
-          {mode === 'signup' && (
-            <select value={form.role} onChange={set('role')}>
-              <option value="student">Student</option>
-              <option value="teacher">Teacher</option>
-              <option value="admin">Admin</option>
-            </select>
-          )}
           <button disabled={busy} onClick={submit}>
             {busy ? '…' : mode === 'login' ? 'Log in →' : 'Create account →'}
           </button>

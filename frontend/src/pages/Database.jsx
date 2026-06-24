@@ -136,6 +136,9 @@ export default function Database() {
     api.adminCheck(pw).then(() => setAuthed(true)).catch(() => sessionStorage.removeItem('adminpw'))
   }, [])
 
+  // lock the panel whenever you leave the page (unmount) — must re-enter the password next time
+  useEffect(() => () => sessionStorage.removeItem('adminpw'), [])
+
   useEffect(() => { if (authed) loadUsers() }, [authed])
 
   if (!authed) return <AdminGate onAuthed={() => setAuthed(true)} />

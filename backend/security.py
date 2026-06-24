@@ -1,9 +1,31 @@
-"""Password hashing with the stdlib — no bcrypt/passlib dependency.
-PBKDF2-HMAC-SHA256, per-user salt, stored as "salt$hash" (hex)."""
+"""Password hashing (stdlib PBKDF2) + at-rest file encryption (Fernet/AES)."""
 import hashlib
 import secrets
 
+from cryptography.fernet import Fernet
+
+from . import config
+
 _ITER = 200_000
+
+_fernet = None
+
+
+def _f():
+    global _fernet
+    if _fernet is None:
+        _fernet = Fernet(config.file_key())
+    return _fernet
+
+
+def encrypt_bytes(data: bytes) -> bytes:
+    """Encrypt file bytes for storage at rest (authenticated AES)."""
+    return _f().encrypt(data)
+
+
+def decrypt_bytes(token: bytes) -> bytes:
+    """Decrypt bytes previously produced by encrypt_bytes. Raises on tampering."""
+    return _f().decrypt(token)
 
 
 def hash_password(pw: str) -> str:

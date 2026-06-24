@@ -5,6 +5,8 @@ import { api } from '../api'
 export default function Documents() {
   const { user } = useUser()
   const [docs, setDocs] = useState([])
+  const [files, setFiles] = useState([])
+  const [msg, setMsg] = useState(null)
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -21,8 +23,25 @@ export default function Documents() {
     return () => clearInterval(t)
   }, [docs])
 
+  const pick = (list) => {
+    const arr = Array.from(list).filter((f) => f.name.toLowerCase().endsWith('.pdf'))
+    setErr(arr.length > 5 ? 'Max 5 files; extras ignored.' : null)
+    setFiles(arr.slice(0, 5))
+  }
+
+  const upload = async () => {
+    setErr(null); setMsg(null); setBusy(true)
+    try {
+      const r = await api.upload(files, user.id)
+      setMsg(`Uploaded ${r.uploaded.length} file(s). Click “Ingest” to index them.`)
+      setFiles([])
+      await load()
+    } catch (e) { setErr(e.message) }
+    setBusy(false)
+  }
+
   const ingest = async () => {
-    setErr(null); setBusy(true)
+    setErr(null); setMsg(null); setBusy(true)
     try { await api.ingest(user.id); await load() } catch (e) { setErr(e.message) }
     setBusy(false)
   }
@@ -36,8 +55,24 @@ export default function Documents() {
   return (
     <div>
       <h1>Documents</h1>
-      <button disabled={busy} onClick={ingest}>Ingest into Vector Store</button>
+
+      <div
+        className="drop"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); pick(e.dataTransfer.files) }}
+      >
+        Drag &amp; drop 1–5 PDFs here, or{' '}
+        <input type="file" multiple accept="application/pdf" onChange={(e) => pick(e.target.files)} />
+      </div>
+      {files.length > 0 && <ul>{files.map((f) => <li key={f.name}>{f.name}</li>)}</ul>}
+      <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '1rem' }}>
+        <button disabled={!files.length || busy} onClick={upload}>Upload</button>
+        <button className="ghost" disabled={busy} onClick={ingest}>Ingest into Vector Store</button>
+      </div>
+      {msg && <p className="ok">{msg}</p>}
       {err && <p className="err">{err}</p>}
+
+      <h2>Your documents</h2>
       {docs.length ? (
         <table>
           <thead><tr><th>File</th><th>Status</th><th>Chunks</th><th></th></tr></thead>
@@ -47,7 +82,7 @@ export default function Documents() {
                 <td>{d.filename}</td>
                 <td className={`st-${d.status}`}>{d.status}{d.error ? `: ${d.error}` : ''}</td>
                 <td>{d.chunks}</td>
-                <td><button onClick={() => remove(d)}>Delete</button></td>
+                <td><button className="ghost" onClick={() => remove(d)}>Delete</button></td>
               </tr>
             ))}
           </tbody>
@@ -55,7 +90,7 @@ export default function Documents() {
       ) : (
         <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
           <img src="/img/books.jpg" alt="" style={{ width: '180px', height: '120px', objectFit: 'cover', borderRadius: '12px', opacity: .9 }} />
-          <p className="muted">No documents yet — head to <strong>Upload</strong> to add your PDFs, then ingest them here.</p>
+          <p className="muted">No documents yet — drop your PDFs above and ingest them.</p>
         </div>
       )}
     </div>

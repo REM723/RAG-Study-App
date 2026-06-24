@@ -26,6 +26,18 @@ FAISS_DIR = BASE_DIR / "faiss_index"
 DB_PATH = BASE_DIR / "app.db"
 
 
+SECRET_KEY_PATH = BASE_DIR / "secret.key"
+
+
+def file_key():
+    """Persistent symmetric key for encrypting uploaded PDFs at rest.
+    Generated once on first use; kept out of git via .gitignore."""
+    from cryptography.fernet import Fernet
+    if not SECRET_KEY_PATH.exists():
+        SECRET_KEY_PATH.write_bytes(Fernet.generate_key())
+    return SECRET_KEY_PATH.read_bytes()
+
+
 def user_artifacts(user_id):
     """Per-user PDF folder, created on demand."""
     p = ARTIFACTS_DIR / str(user_id)

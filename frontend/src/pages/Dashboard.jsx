@@ -22,6 +22,52 @@ export default function Dashboard() {
           {avg !== null ? ` · ${avg}% average` : ''}</p>
       </div>
       <p><Link to="/build" className="btn" style={{ textDecoration: 'none', display: 'inline-block' }}>+ Build a new test</Link></p>
+
+      <details className="card howcard" open={tests.length === 0}>
+        <summary>How it works</summary>
+        <p className="muted" style={{ margin: '.4rem 0 1rem' }}>
+          Go from your notes to a graded practice test in five steps.
+        </p>
+        <div className="steps">
+          <div className="step">
+            <div className="step__num">1</div>
+            <div className="step__body">
+              <div className="step__title">📄 Add your material</div>
+              <div className="step__desc">Upload PDFs on the <Link to="/documents">Documents</Link> page and hit <b>Ingest</b> — the app reads and indexes them so it understands your content.</div>
+            </div>
+          </div>
+          <div className="step">
+            <div className="step__num">2</div>
+            <div className="step__body">
+              <div className="step__title">✨ Generate questions</div>
+              <div className="step__desc">On <Link to="/generate">Generate</Link>, create multiple-choice and descriptive questions drawn straight from your material — each one cites the page it came from.</div>
+            </div>
+          </div>
+          <div className="step">
+            <div className="step__num">3</div>
+            <div className="step__body">
+              <div className="step__title">🧩 Build a test</div>
+              <div className="step__desc">On <Link to="/build">Build Test</Link>, pick how many of each type you want and we'll assemble a test from your question bank.</div>
+            </div>
+          </div>
+          <div className="step">
+            <div className="step__num">4</div>
+            <div className="step__body">
+              <div className="step__title">✍️ Take it</div>
+              <div className="step__desc">Answer at your own pace — your progress saves automatically. Submit when you're ready.</div>
+            </div>
+          </div>
+          <div className="step">
+            <div className="step__num">5</div>
+            <div className="step__body">
+              <div className="step__title">📊 Review your results</div>
+              <div className="step__desc">See your score, a section-by-section breakdown, correct answers, point-by-point feedback, and the source behind every question on the <Link to="/results">Results</Link> page.</div>
+            </div>
+          </div>
+        </div>
+        <p className="muted" style={{ marginTop: '1rem' }}>🔒 Everything stays private to your account — never shared with other users.</p>
+      </details>
+
       <h2>Your tests &amp; scores</h2>
       {tests.length === 0 ? <p>No tests yet — build one to get started.</p> : (
         <table>

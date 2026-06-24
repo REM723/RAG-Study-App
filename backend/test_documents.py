@@ -41,11 +41,12 @@ def demo():
         assert r.status_code == 200, r.text
         assert r.json()["uploaded"][0]["status"] == "pending"
 
-        # same filename rejected for the same user
+        # same filename can be re-uploaded — auto-suffixed, kept as a distinct copy
         r = c.post("/documents/upload", files={"files": ("good.pdf", pdf, "application/pdf")}, data=uid)
-        assert r.status_code == 409, r.text
+        assert r.status_code == 200, r.text
+        assert r.json()["uploaded"][0]["filename"] == "good (1).pdf", r.text
 
-        # but a DIFFERENT user can upload the same filename
+        # a DIFFERENT user can also upload the same filename
         r = c.post("/documents/upload", files={"files": ("good.pdf", pdf, "application/pdf")}, data={"user_id": "2"})
         assert r.status_code == 200, r.text
 
@@ -53,8 +54,8 @@ def demo():
         r = c.post("/documents/upload", files={"files": ("bad.pdf", b"not a pdf", "application/pdf")}, data=uid)
         assert r.status_code == 400, r.text
 
-        # list is scoped per user
-        assert len(c.get("/documents?user_id=1").json()) == 1
+        # list is scoped per user (user 1 has good.pdf + good (1).pdf)
+        assert len(c.get("/documents?user_id=1").json()) == 2
         assert len(c.get("/documents?user_id=2").json()) == 1
 
     print("OK")

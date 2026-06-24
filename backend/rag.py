@@ -1,12 +1,15 @@
 import logging
 import shutil
+from io import BytesIO
 
-from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document as LCDocument
+from cryptography.fernet import InvalidToken
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 
-from . import config
+from . import config, security
 
 log = logging.getLogger("rag")
 
@@ -29,7 +32,23 @@ def _load_chunks(user_id):
     )
     chunks, per_file = [], {}
     for pdf in sorted(config.user_artifacts(user_id).glob("*.pdf")):
-        pages = PyPDFLoader(str(pdf)).load()         # one Document per page
+        try:
+            raw = pdf.read_bytes()
+            try:
+                data = security.decrypt_bytes(raw)
+            except InvalidToken:
+                data = raw  # legacy plaintext upload — migrate it to encrypted on disk
+                pdf.write_bytes(security.encrypt_bytes(raw))
+            # decrypt + parse in memory — no temp file (avoids Windows file locks)
+            reader = PdfReader(BytesIO(data))
+            pages = []
+            for n, page in enumerate(reader.pages):   # n is 0-based, matches old loader
+                text = page.extract_text() or ""
+                if text.strip():
+                    pages.append(LCDocument(page_content=text, metadata={"page": n}))
+        except Exception as e:
+            log.warning("skip %s: %s", pdf.name, e)   # one bad file shouldn't fail the batch
+            continue
         split = splitter.split_documents(pages)       # fix #2: no [:20] cap
         for i, d in enumerate(split):
             d.metadata["source_file"] = pdf.name
