@@ -25,13 +25,18 @@ def embeddings():
     return _embeddings
 
 
-def _load_chunks(user_id):
-    """Load every PDF in the user's Artifacts folder, chunk with source/page/index metadata."""
+def _load_chunks(user_id, only=None):
+    """Load PDFs in the user's Artifacts folder, chunk with source/page/index metadata.
+
+    only: optional set of filenames to restrict to (for per-document ingest).
+    """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=config.CHUNK_SIZE, chunk_overlap=config.CHUNK_OVERLAP
     )
     chunks, per_file = [], {}
     for pdf in sorted(config.user_artifacts(user_id).glob("*.pdf")):
+        if only is not None and pdf.name not in only:
+            continue
         try:
             raw = pdf.read_bytes()
             try:
@@ -75,6 +80,27 @@ def rebuild_index(user_id):
     idx.mkdir(parents=True, exist_ok=True)
     store.save_local(str(idx))
     log.info("FAISS rebuilt for user %s: %d chunks from %d files", user_id, len(chunks), len(per_file))
+    return per_file, chunks
+
+
+def add_to_index(user_id, only):
+    """Embed only the named PDFs and append to the user's FAISS index (incremental).
+
+    Returns ({filename: chunk_count}, [chunk Documents]) for the added files.
+    """
+    # ponytail: appends, never dedups — only call for docs not already indexed (pending/failed).
+    chunks, per_file = _load_chunks(user_id, only=only)
+    if not chunks:
+        return per_file, chunks
+    idx = config.user_index(user_id)
+    store = load_index(user_id)
+    if store is None:
+        store = FAISS.from_documents(chunks, embeddings())
+    else:
+        store.add_documents(chunks)
+    idx.mkdir(parents=True, exist_ok=True)
+    store.save_local(str(idx))
+    log.info("FAISS +%d chunks for user %s from %s", len(chunks), user_id, list(per_file))
     return per_file, chunks
 
 

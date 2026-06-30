@@ -33,17 +33,16 @@ export default function Documents() {
     setErr(null); setMsg(null); setBusy(true)
     try {
       const r = await api.upload(files, user.id)
-      setMsg(`Uploaded ${r.uploaded.length} file(s). Click “Ingest” to index them.`)
+      setMsg(`Uploaded ${r.uploaded.length} file(s). Click “Ingest” next to each to index it.`)
       setFiles([])
       await load()
     } catch (e) { setErr(e.message) }
     setBusy(false)
   }
 
-  const ingest = async () => {
-    setErr(null); setMsg(null); setBusy(true)
-    try { await api.ingest(user.id); await load() } catch (e) { setErr(e.message) }
-    setBusy(false)
+  const ingestOne = async (d) => {
+    setErr(null); setMsg(null)
+    try { await api.ingestOne(d.id); await load() } catch (e) { setErr(e.message) }
   }
 
   const remove = async (d) => {
@@ -67,7 +66,6 @@ export default function Documents() {
       {files.length > 0 && <ul>{files.map((f) => <li key={f.name}>{f.name}</li>)}</ul>}
       <div style={{ display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '1rem' }}>
         <button disabled={!files.length || busy} onClick={upload}>Upload</button>
-        <button className="ghost" disabled={busy} onClick={ingest}>Ingest into Vector Store</button>
       </div>
       {msg && <p className="ok">{msg}</p>}
       {err && <p className="err">{err}</p>}
@@ -82,7 +80,14 @@ export default function Documents() {
                 <td>{d.filename}</td>
                 <td className={`st-${d.status}`}>{d.status}{d.error ? `: ${d.error}` : ''}</td>
                 <td>{d.chunks}</td>
-                <td><button className="ghost" onClick={() => remove(d)}>Delete</button></td>
+                <td style={{ display: 'flex', gap: '.5rem' }}>
+                  {d.status !== 'completed' && (
+                    <button disabled={d.status === 'processing'} onClick={() => ingestOne(d)}>
+                      {d.status === 'processing' ? 'Ingesting…' : 'Ingest'}
+                    </button>
+                  )}
+                  <button className="ghost" onClick={() => remove(d)}>Delete</button>
+                </td>
               </tr>
             ))}
           </tbody>

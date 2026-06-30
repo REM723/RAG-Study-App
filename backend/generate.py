@@ -3,6 +3,7 @@ import logging
 import random
 import re
 
+import numpy as np
 from langchain_groq import ChatGroq
 
 from . import config, rag
@@ -27,17 +28,24 @@ def grader_llm():
     return _grader
 
 
+SKIP_RULE = """If the context is not a single coherent concept you can ask one self-contained \
+question about — e.g. a table of contents, index, list of chapter/section headings, \
+exercise/question list, or disconnected fragments — return {{"skip": true}} and nothing else."""
+
 MCQ_PROMPT = """Based ONLY on the context below, write one multiple-choice question.
-Return STRICT JSON, nothing else:
+""" + SKIP_RULE + """
+Otherwise return STRICT JSON, nothing else:
 {{"question": "...", "options": ["a","b","c","d"], "answer": "<exact text of the correct option>", "explanation": "..."}}
-Exactly 4 options. "answer" must be verbatim one of the options.
+Use 2 to 4 options — only as many as are genuinely distinct and plausible; don't pad to 4.
+"answer" must be verbatim one of the options.
 
 Context:
 {context}"""
 
 DESC_PROMPT = """Based ONLY on the context below, write one descriptive question and a model
 answer broken into distinct marking points (one idea per point).
-Return STRICT JSON, nothing else:
+""" + SKIP_RULE + """
+Otherwise return STRICT JSON, nothing else:
 {{"question": "...", "rubric": ["point 1", "point 2", "..."]}}
 Use 2 to 6 rubric points.
 
@@ -47,23 +55,32 @@ Context:
 
 def _extract_json(text):
     try:
-        return json.loads(text)
+        obj = json.loads(text)
     except Exception:
         m = re.search(r"\{.*\}", text, re.S)
         if not m:
             raise ValueError("no JSON found")
-        return json.loads(m.group(0))
+        obj = json.loads(m.group(0))
+    if isinstance(obj, dict) and obj.get("skip"):
+        raise ValueError("chunk not substantive")  # loop moves to next chunk
+    return obj
 
 
 def _norm(q):
     return re.sub(r"\s+", " ", q).strip().lower()
 
 
+def _too_similar(v, vecs, thresh=0.88):
+    # bge vectors are normalized, so dot == cosine. ponytail: 0.88 tuned by eye; raise if it
+    # rejects distinct questions, lower if near-duplicates still slip through.
+    return any(float(np.dot(v, u)) > thresh for u in vecs)
+
+
 def parse_mcq(text):
     obj = _extract_json(text)
     opts = obj["options"]
-    if not isinstance(opts, list) or len(opts) != 4:
-        raise ValueError("need exactly 4 options")
+    if not isinstance(opts, list) or not 2 <= len(opts) <= 4:
+        raise ValueError("need 2-4 options")
     opts = [str(o).strip() for o in opts]
     answer = str(obj["answer"]).strip()
     if answer not in opts:
@@ -100,7 +117,7 @@ def _usable_chunks(user_id):
 
 def _generate(count, prompt, parser, user_id):
     """One question per chunk so every question traces to a single source chunk."""
-    out, seen = [], set()
+    out, seen, vecs = [], set(), []
     for d in _usable_chunks(user_id):
         if len(out) >= count:
             break
@@ -113,7 +130,12 @@ def _generate(count, prompt, parser, user_id):
         key = _norm(q["question"])
         if key in seen:
             continue
+        v = np.asarray(rag.embeddings().embed_query(q["question"]))
+        if _too_similar(v, vecs):
+            log.warning("skip near-duplicate question")
+            continue
         seen.add(key)
+        vecs.append(v)
         q["source_file"] = d.metadata.get("source_file")
         q["source_page"] = d.metadata.get("page")
         out.append(q)

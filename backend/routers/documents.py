@@ -104,6 +104,54 @@ def _run_ingest(user_id):
         db.close()
 
 
+def _run_ingest_one(user_id, doc_id):
+    """Background: embed a single PDF and append it to the user's index (no full rebuild)."""
+    db = SessionLocal()
+    try:
+        doc = db.get(Document, doc_id)
+        if doc is None:
+            return
+        per_file, chunks = rag.add_to_index(user_id, only={doc.filename})
+        db.query(Chunk).filter_by(document_id=doc_id).delete()
+        for c in chunks:
+            if c.metadata.get("source_file") != doc.filename:
+                continue
+            db.add(Chunk(
+                document_id=doc_id,
+                text=c.page_content,
+                page_number=c.metadata.get("page"),
+                chapter=c.metadata.get("chapter"),
+                embedding_ref=f"{doc.filename}#{c.metadata.get('chunk_index')}",
+            ))
+        n = per_file.get(doc.filename)
+        if n:
+            doc.status, doc.chunks, doc.error = "completed", n, None
+        else:
+            doc.status, doc.error = "failed", "No chunks extracted"
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        log.exception("Ingest failed")
+        msg = str(e) or e.__class__.__name__
+        doc = db.get(Document, doc_id)
+        if doc:
+            doc.status, doc.error = "failed", msg
+            db.commit()
+    finally:
+        db.close()
+
+
+@router.post("/{doc_id}/ingest", response_model=IngestStatus)
+def ingest_one(doc_id: int, background: BackgroundTasks, db: Session = Depends(get_db)):
+    doc = db.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    doc.status = "processing"
+    db.commit()
+    background.add_task(_run_ingest_one, doc.user_id, doc.id)
+    return {"status": "processing", "documents": [DocumentOut.model_validate(doc)]}
+
+
 @router.post("/ingest", response_model=IngestStatus)
 def ingest(user_id: int, background: BackgroundTasks, db: Session = Depends(get_db)):
     docs = db.query(Document).filter_by(user_id=user_id).all()

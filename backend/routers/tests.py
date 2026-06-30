@@ -21,10 +21,16 @@ def _pick(db, qtype, n, user_id):
     return random.sample(rows, n)
 
 
-def _view(db, test):
+def _ordered_questions(db, test):
+    """Questions in paper order — IN(...) returns arbitrary DB order otherwise."""
     qs = db.query(Question).filter(Question.id.in_(test.question_ids)).all()
     order = {qid: i for i, qid in enumerate(test.question_ids)}
     qs.sort(key=lambda q: order[q.id])
+    return qs
+
+
+def _view(db, test):
+    qs = _ordered_questions(db, test)
     return {"id": test.id, "seq": test.seq, "questions": [TestQuestionOut.model_validate(q) for q in qs]}
 
 
@@ -82,7 +88,7 @@ def submit(test_id: int, req: AttemptRequest, db: Session = Depends(get_db)):
     answers = {**(a.answers or {}), **req.answers}
     if req.user_id:
         a.user_id = req.user_id
-    qs = db.query(Question).filter(Question.id.in_(test.question_ids)).all()
+    qs = _ordered_questions(db, test)  # grade in paper order
     result = scoring.grade(qs, answers, generate.grade_descriptive)
     a.answers, a.submitted, a.result, a.score = answers, True, result, result["total"]
     db.commit()  # ensures a.id for the Evaluation row

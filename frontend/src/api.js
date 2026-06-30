@@ -27,6 +27,7 @@ export const api = {
     return req('/documents/upload', { method: 'POST', body: fd })
   },
   ingest: (userId) => req(`/documents/ingest?user_id=${userId}`, { method: 'POST' }),
+  ingestOne: (id) => req(`/documents/${id}/ingest`, { method: 'POST' }),
   deleteDoc: (id) => req(`/documents/${id}`, { method: 'DELETE' }),
   genMcq: (count, user_id) => req('/questions/mcq', json({ count, user_id })),
   genDesc: (count, user_id) => req('/questions/descriptive', json({ count, user_id })),
