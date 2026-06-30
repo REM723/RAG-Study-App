@@ -33,7 +33,7 @@ Every user has their own private library, vector index, questions, and test hist
 **Backend (Python)**
 - FastAPI + Uvicorn
 - LangChain (`langchain`, `langchain-community`, `langchain-core`, `langchain-text-splitters`, `langchain-groq`)
-- LLM: Groq-hosted `llama-3.3-70b-versatile`
+- LLM: Groq-hosted `openai/gpt-oss-120b`
 - Embeddings: `BAAI/bge-small-en-v1.5` (sentence-transformers, local)
 - Vector store: FAISS (`faiss-cpu`)
 - PDF parsing: `pypdf`
